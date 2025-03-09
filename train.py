@@ -19,7 +19,15 @@ torch.cuda.manual_seed(42)
 
 NUM_WORKERS = 1
 
-from enum import Enum
+def save_model(model: torch.nn.Module, target_dir: str, epoch: int):
+    target_dir_path = Path(target_dir)
+    target_dir_path.mkdir(parents=True, exist_ok=True)
+
+    check_point_name = f"model_epoch_{epoch}"
+    model_save_path = target_dir_path / check_point_name
+
+    torch.save(obj=model.state_dict(), f=model_save_path)
+
 
 if __name__ == '__main__':
     # Calculate means and stds of the trainset and normalize
@@ -41,8 +49,6 @@ if __name__ == '__main__':
     print(f'Calculated stds: {stds}')
 
     import albumentations as A
-    import albumentations.augmentations.functional as F
-    from albumentations.pytorch import ToTensorV2
 
     data_augmentation = {
         'train': A.Compose([
@@ -79,22 +85,11 @@ if __name__ == '__main__':
     ENCODER_WEIGHTS = 'imagenet'
     ACTIVATION = 'softmax2d' # could be None for logits or 'softmax2d' for multiclass segmentation
 
-    # create segmentation model with pretrained encoder
     model = smp.Unet(
         encoder_name=ENCODER, 
         encoder_weights=ENCODER_WEIGHTS, 
         classes=6, 
         activation=ACTIVATION,
-    )
-
-    from torchinfo import summary
-
-    summary(model, 
-            input_size=(16, 3, 224, 224), # make sure this is "input_size", not "input_shape" (batch_size, color_channels, height, width)
-            verbose=0,
-            col_names=["input_size", "output_size", "num_params", "trainable"],
-            col_width=20,
-            row_settings=["var_names"]
     )
 
     model = model.to(device)
@@ -103,7 +98,6 @@ if __name__ == '__main__':
     optimizer_UNet = optim.Adam(model.parameters(), lr=0.001)
     exp_lr_scheduler_UNet = lr_scheduler.StepLR(optimizer_UNet, step_size=7, gamma=0.1)
 
-    # Trainer
     NUM_EPOCHS = 4
     trainer = Trainer(model=model,
                       dataloaders=dataloaders,
@@ -115,5 +109,4 @@ if __name__ == '__main__':
                       save_dir='exps',
                       device=device)
 
-    ## Training process
     model_results = trainer.train_model()

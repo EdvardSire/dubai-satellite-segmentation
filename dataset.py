@@ -4,16 +4,13 @@ from torchvision import transforms
 import numpy as np
 from skimage.io import imread
 from enum import Enum
-from pathlib import Path
 import torch
 import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
-import matplotlib.pyplot as plt
 import time
 from tqdm import trange
 
-from pathlib import Path
 
 
 class MaskColorMap(Enum):
@@ -24,103 +21,6 @@ class MaskColorMap(Enum):
     Vegetation = (254, 221, 58)
     Water = (226, 169, 41)
 
-    
-def one_hot_encode_masks(masks, num_classes):
-    """
-    :param masks: Y_train patched mask dataset 
-    :param num_classes: number of classes
-    :return: 
-    """
-
-    img_height, img_width, img_channels = masks.shape
-
-        # create new mask of zeros
-    encoded_image = np.zeros((img_height, img_width, 1)).astype(int)
-
-    for j, cls in enumerate(MaskColorMap):
-        encoded_image[np.all(masks == cls.value, axis=-1)] = j
-
-    # return one-hot encoded labels
-    encoded_image = np.reshape(np.eye(num_classes, dtype=int)[encoded_image],(224,224,6))
-
-    return encoded_image
-
-class SemanticSegmentationDataset(torch.utils.data.Dataset):
-    """Semantic Segmentation Dataset"""
-    def __init__(self, image_dir, mask_dir, image_names, mask_names, transform=None, mask_transform=None):
-        """
-        Args:
-            image_dir (string): Directory with all the images.
-            mask_dir (string): Directory with all the masks.
-            image_names (list): List of image names.
-            mask_names (list): List of mask names.
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
-        """
-        self.image_dir = image_dir
-        self.mask_dir = mask_dir
-        self.image_names = image_names
-        self.mask_names = mask_names
-        self.transform = transform
-        self.mask_transform = mask_transform
-        self.inputs_dtype = torch.float32
-        self.targets_dtype = torch.long
-
-    def __len__(self):
-        return len(self.image_names)
-
-    def __getitem__(self, idx):
-        img_name = os.path.join(self.image_dir, self.image_names[idx])
-        mask_name = os.path.join(self.mask_dir, self.mask_names[idx])
-
-        image = imread(img_name)
-        mask = imread(mask_name)
-
-        # One-hot encoding
-        mask = one_hot_encode_masks(mask, 6)
-
-        if self.transform:
-            transformed = self.transform(image=image, mask=mask)
-            image = transformed["image"]
-            mask = transformed["mask"]
-
-        tenn = transforms.ToTensor()
-        image = tenn(image)
-        mask = tenn(mask)
-        
-        return image, mask
-
-# Save the model to the target dir
-def save_model(model: torch.nn.Module, target_dir: str, epoch: int):
-    """
-    Saves a PyTorch model to a target directory.
-    """
-    # Create target directory
-    target_dir_path = Path(target_dir)
-    target_dir_path.mkdir(parents=True, exist_ok=True)
-
-    # Create model save path
-    check_point_name = f"model_epoch_{epoch}"
-    model_save_path = target_dir_path / check_point_name
-
-    # Save the model state_dict()
-    #print(f"[INFO] Saving model to: {model_save_path}")
-    torch.save(obj=model.state_dict(), f=model_save_path)
-
-# Plot the training curve
-def plot_curve(results: dict, epochs: int):
-    train_ious, val_ious = np.array(results["train_iou"]), np.array(results["val_iou"])
-    train_losses, val_losses = np.array(results["train_loss"]), np.array(results["val_loss"])
-
-    plt.plot(np.arange(epochs, step=1), train_losses, label='Train loss')
-    plt.plot(np.arange(epochs, step=1), train_ious, label='Train IoU')
-    plt.plot(np.arange(epochs, step=1), val_losses, label='Val loss')
-    plt.plot(np.arange(epochs, step=1), val_ious, label='Val IoU')
-    plt.xlabel('Epoch')
-    plt.legend(loc='upper right')
-    plt.show()
-    
-# Categorical Cross Entropy Loss
 class CategoricalCrossEntropyLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -128,7 +28,6 @@ class CategoricalCrossEntropyLoss(nn.Module):
     def forward(self, y_hat, y):
         return F.nll_loss(y_hat.log(), y.argmax(dim=1))
 
-# Multiclass Dice Loss
 class MultiDiceLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -141,7 +40,7 @@ class MultiDiceLoss(nn.Module):
 
         return (2. * intersection + smooth) / (torch.sum(y_true_f) + torch.sum(y_pred_f) + smooth)
 
-    def dice_coef_multiclass(self, y_pred, y_true, numLabels=6, smooth=0.0001):    
+    def dice_coef_multiclass(self, y_pred, y_true, numLabels=len(MaskColorMap), smooth=0.0001):    
         dice=0
 
         for index in range(numLabels):
@@ -153,7 +52,6 @@ class MultiDiceLoss(nn.Module):
         #return self.dice_coef_multiclass(torch.softmax(y_pred, dim=1), y_true)
         return self.dice_coef_multiclass(y_pred, y_true)
 
-# Mean IoU Score
 class MeanIoU(nn.Module):
     def __init__(self):
         super().__init__()
@@ -179,6 +77,61 @@ class MeanIoU(nn.Module):
     def forward(self, y_pred, y_true):
         #return self.Mean_IoU(torch.softmax(y_pred, dim=1), y_true)
         return self.Mean_IoU(y_pred, y_true)
+
+    
+
+class SemanticSegmentationDataset(torch.utils.data.Dataset):
+    def __init__(self, image_dir, mask_dir, image_names, mask_names, transform=None, mask_transform=None):
+        """
+        Args:
+            image_dir (string): Directory with all the images.
+            mask_dir (string): Directory with all the masks.
+            image_names (list): List of image names.
+            mask_names (list): List of mask names.
+            transform (callable, optional): Optional transform to be applied
+                on a sample.
+        """
+        self.image_dir = image_dir
+        self.mask_dir = mask_dir
+        self.image_names = image_names
+        self.mask_names = mask_names
+        self.transform = transform
+        self.mask_transform = mask_transform
+        self.inputs_dtype = torch.float32
+        self.targets_dtype = torch.long
+
+    def one_hot_encode_masks(self, masks, num_classes):
+        img_height, img_width, _ = masks.shape
+        encoded_image = np.zeros((img_height, img_width, 1)).astype(int)
+        for j, cls in enumerate(MaskColorMap):
+            encoded_image[np.all(masks == cls.value, axis=-1)] = j
+        encoded_image = np.reshape(np.eye(num_classes, dtype=int)[encoded_image],(img_height,img_width,num_classes))
+
+        return encoded_image
+
+    def __len__(self):
+        return len(self.image_names)
+
+    def __getitem__(self, idx):
+        img_name = os.path.join(self.image_dir, self.image_names[idx])
+        mask_name = os.path.join(self.mask_dir, self.mask_names[idx])
+
+        image = imread(img_name)
+        mask = imread(mask_name)
+
+        mask = self.one_hot_encode_masks(mask, len(MaskColorMap))
+
+        if self.transform:
+            transformed = self.transform(image=image, mask=mask)
+            image = transformed["image"]
+            mask = transformed["mask"]
+
+        tenn = transforms.ToTensor()
+        image = tenn(image)
+        mask = tenn(mask)
+        
+        return image, mask
+
 
 class Trainer:
     def __init__(self, 
@@ -307,42 +260,6 @@ class Trainer:
         self.results["val_loss"].append(np.mean(running_losses))
         self.results["val_iou"].append(np.mean(running_ious))
 
-def evaluate_model(model: torch.nn.Module, 
-                   dataloaders: torch.utils.data.DataLoader,
-                   metric: torch.nn.Module, 
-                   criterion: torch.nn.Module, 
-                   device: torch.device):
-    """
-    Evaluate model performance on testset
-    """
-    model.eval()
-    model.to(device)
-
-    running_ious, running_losses = [], []
-
-    for x, y in dataloaders:
-    # Send to device (GPU or CPU)
-        inputs = x.to(device)
-        targets = y.to(device)
-
-        with torch.no_grad():
-            outputs = model(inputs)
-            # Calculate the loss
-            loss = criterion(outputs, targets)
-            loss_value = loss.item()
-            running_losses.append(loss_value)
-
-            # Calculate the iou
-            iou = metric(outputs, targets)
-            iou_value = iou.item()
-            running_ious.append(iou_value)
-    
-    mean_loss = np.mean(running_losses)
-    mean_metric = np.mean(running_ious)
-        
-    return mean_loss, mean_metric
-
-# Predict the masks
 def predict_mask(img: torch.Tensor, 
             model: torch.nn.Module, 
             device: str):
