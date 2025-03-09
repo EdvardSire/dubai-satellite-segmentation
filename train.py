@@ -1,94 +1,119 @@
-"""
-Trains a Semantic Segmentation of Aerial Imagery Model.
-"""
-
+import os
 import torch
-import splitfolders
-import numpy as np
+import torchvision
+from torchvision import transforms
 import torch.optim as optim
 import segmentation_models_pytorch as smp
-import utils,engine,data_setup,predictions
+import albumentations as A
+from pathlib import Path
+import torch
+
+from pathlib import Path
 
 from torch.optim import lr_scheduler
 
-# Set the manual seeds
+from dataset import *
+
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
 
-# Setup hyperparameters
-NUM_EPOCHS = 30
-BATCH_SIZE = 16
+NUM_WORKERS = 1
 
-# Create Patches from the original images
-# patch_size = 224
-# original_dir = 'Semantic_segmentation_dataset'
-# data_setup.create_patches(image_dir=original_dir, patch_size=patch_size, target_dir='Patches')
+from enum import Enum
 
-data_dir = 'Patches'
-splitfolders.ratio(data_dir, output="train_split", ratio=(0.8, 0.1, 0.1))
-output_dir = 'train_split'
+if __name__ == '__main__':
+    # Calculate means and stds of the trainset and normalize
 
-# Setup target device
-device = "cuda" if torch.cuda.is_available() else "cpu"
+    dataset_split = Path('dataset_split')
+    train_data = torchvision.datasets.ImageFolder(root = dataset_split/'train', transform = transforms.ToTensor())
 
-# Calculate the means and stds of the dataset
-means, stds = data_setup.get_means_stds(output_dir=output_dir)
+    means = torch.zeros(3)
+    stds = torch.zeros(3)
 
-# Create data augmentation
-data_augmentation = data_setup.get_transforms(means=means, stds=stds)
+    for img, label in train_data:
+        means += torch.mean(img, dim = (1,2))
+        stds += torch.std(img, dim = (1,2))
 
-# Create DataLoaders with help from data_setup.py
-dataloaders, dataset_sizes = data_setup.create_dataloaders(
-    output_dir=output_dir, 
-    data_augmentation=data_augmentation, 
-    batch_size=BATCH_SIZE
-)
+    means /= len(train_data)
+    stds /= len(train_data)
+        
+    print(f'Calculated means: {means}')
+    print(f'Calculated stds: {stds}')
 
-#  Create segmentation model
-ENCODER = 'efficientnet-b4'
-ENCODER_WEIGHTS = 'imagenet'
-ACTIVATION = 'softmax2d'
+    import albumentations as A
+    import albumentations.augmentations.functional as F
+    from albumentations.pytorch import ToTensorV2
 
-# create segmentation model with pretrained encoder
-model = smp.Unet(
-    encoder_name=ENCODER, 
-    encoder_weights=ENCODER_WEIGHTS, 
-    classes=6, 
-    activation=ACTIVATION,
-)
+    data_augmentation = {
+        'train': A.Compose([
+            A.ShiftScaleRotate(shift_limit=0.2, scale_limit=0.2, rotate_limit=30, p=0.5),
+            A.RGBShift(r_shift_limit=25, g_shift_limit=25, b_shift_limit=25, p=0.5),
+            A.RandomBrightnessContrast(brightness_limit=0.3, contrast_limit=0.3, p=0.5),
+            A.Normalize(mean=means, std=stds),
+        ]),
+        'val': A.Compose([
+            A.Normalize(mean=means, std=stds),
+        ]),
+        'test': A.Compose([
+            A.Normalize(mean=means, std=stds),
+        ]),
+    }
+    
 
-## Model inItialization
-model = model.to(device)
-metric_UNet = utils.MeanIoU()
-criterion_UNet = utils.MultiDiceLoss()
-optimizer_UNet = optim.Adam(model.parameters(), lr=0.001)
-exp_lr_scheduler_UNet = lr_scheduler.StepLR(optimizer_UNet, step_size=7, gamma=0.1)
 
-# Trainer
-trainer = engine.Trainer(model=model,
-                         dataloaders=dataloaders,
-                         epochs=30,
-                         metric=metric_UNet,
-                         criterion=criterion_UNet, 
-                         optimizer=optimizer_UNet,
-                         scheduler=exp_lr_scheduler_UNet,
-                         save_dir="UNet_Model_Output",
-                         device=device)
+    BATCH_SIZE = 64
+    image_datasets = {x: SemanticSegmentationDataset(image_dir=os.path.join(dataset_split, x, 'images'),
+                                                     mask_dir=os.path.join(dataset_split, x, 'masks'), 
+                                                     image_names=sorted(os.listdir(os.path.join(dataset_split, x, 'images'))),
+                                                     mask_names=sorted(os.listdir(os.path.join(dataset_split, x, 'masks'))),
+                                                     transform=None) for x in ['train', 'val', 'test']}
 
-## Training process
-model_results = trainer.train_model()
+    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=BATCH_SIZE,shuffle=True, 
+                                                  drop_last=True) for x in ['train', 'val', 'test']}
+    dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val', 'test']}
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    
+    import segmentation_models_pytorch as smp
 
-## Evaluate the model
-outputs = predictions.evaluate_model(model=model, dataloaders=dataloaders['val'], 
-                                     metric=metric_UNet,criterion=criterion_UNet,
-                                     device=device)
+    ENCODER = 'efficientnet-b4'
+    ENCODER_WEIGHTS = 'imagenet'
+    ACTIVATION = 'softmax2d' # could be None for logits or 'softmax2d' for multiclass segmentation
 
-## Display the predictions
-images, masks = next(iter(dataloaders['test']))
+    # create segmentation model with pretrained encoder
+    model = smp.Unet(
+        encoder_name=ENCODER, 
+        encoder_weights=ENCODER_WEIGHTS, 
+        classes=6, 
+        activation=ACTIVATION,
+    )
 
-idx = 0
-original_image = np.transpose(images[idx])
-ground_truth_mask = np.transpose(np.argmax(masks[idx], axis=0, keepdims=True))
-res = predictions.predict_mask(img=images, model=model, device=device)
-predicted_mask = np.transpose(np.argmax(res[idx].to('cpu'), axis=0, keepdims=True))
-utils.display(original_image=original_image, ground_truth_mask=ground_truth_mask, predicted_mask=predicted_mask)
+    from torchinfo import summary
+
+    summary(model, 
+            input_size=(16, 3, 224, 224), # make sure this is "input_size", not "input_shape" (batch_size, color_channels, height, width)
+            verbose=0,
+            col_names=["input_size", "output_size", "num_params", "trainable"],
+            col_width=20,
+            row_settings=["var_names"]
+    )
+
+    model = model.to(device)
+    metric_UNet = MeanIoU()
+    criterion_UNet = MultiDiceLoss()
+    optimizer_UNet = optim.Adam(model.parameters(), lr=0.001)
+    exp_lr_scheduler_UNet = lr_scheduler.StepLR(optimizer_UNet, step_size=7, gamma=0.1)
+
+    # Trainer
+    NUM_EPOCHS = 4
+    trainer = Trainer(model=model,
+                      dataloaders=dataloaders,
+                      epochs=NUM_EPOCHS,
+                      metric=metric_UNet,
+                      criterion=criterion_UNet, 
+                      optimizer=optimizer_UNet,
+                      scheduler=exp_lr_scheduler_UNet,
+                      save_dir='exps',
+                      device=device)
+
+    ## Training process
+    model_results = trainer.train_model()
