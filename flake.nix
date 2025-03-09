@@ -10,15 +10,44 @@ let
   system = "x86_64-linux";
   pkgs = import nixpkgs {
     system = system;
-    config.allowUnfree = true;
   };
-  # simElevatorServer = import ./simElevatorServer.nix;
+  segmentation_models = pkgs.python312Packages.buildPythonPackage rec {
+    pname = "segmentation-models-pytorch";
+    version = "0.3.4";
+    src = pkgs.fetchFromGitHub {
+			owner = "qubvel-org";
+			repo = "segmentation_models.pytorch";
+			rev = "v0.3.4";
+			sha256 = "M/7c/bItUe69dBiD47LFhhuD44648/R68iBXvAT0Jmc=";
+		};
+  };
+  pretrainedmodels = pkgs.python312Packages.buildPythonPackage rec {
+    pname = "pretrainedmodels";
+    version = "0.7.4";
+    src = pkgs.fetchFromGitHub {
+      owner = "Cadene";
+      repo = "pretrained-models.pytorch";
+      rev = "8aae3d8f1135b6b13fed79c1d431e3449fdbf6e0";
+      sha256 = "OK865VBFRbsSZbEGHe1wLdkioj595YmLwaztwx2R6tE=";
+    };
+  };
+  efficientnet = pkgs.python312Packages.buildPythonPackage rec {
+    pname = "efficientnet-pytorch";
+    version = "0.7.1";
+    src = pkgs.fetchFromGitHub {
+      owner = "lukemelas";
+      repo = "EfficientNet-PyTorch";
+      rev = "e047e4eb9e3ac1cb11e3efa69694c150293b16b1";
+      sha256 = "RGOVhxjt0dFv3valneHjzZaF7m9JtC1MNkbh7MUGogo=";
+    };
+  };
 in {
+  # packages.${system}.example_derivation = pkgs.callPackage ./example_derivation.nix { };
   devShell.${system} = pkgs.mkShell {
-    # buildInputs = [
-    #   simElevatorServer
+    # packages = [
+    #   self.packages.${system}.example_derivation 
     # ];
-    packages = (with pkgs.python312Packages; [
+        packages = (with pkgs.python312Packages; [
       torchWithoutCuda 
       torchvision
       numpy
@@ -26,8 +55,11 @@ in {
       # scikit-learn-extra
       scipy
       albumentations
-    ]) ++ (with pkgs; [
-      gitMinimal
+    ]) ++ ([
+      segmentation_models
+      pretrainedmodels
+      efficientnet
+      pkgs.python312Packages.timm
     ]);
 
     shellHook = ''
