@@ -52,7 +52,6 @@ in {
       torchvision
       numpy
       opencv4
-      # scikit-learn-extra
       scipy
       albumentations
     ]) ++ ([
