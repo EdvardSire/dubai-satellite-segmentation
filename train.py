@@ -13,15 +13,6 @@ torch.cuda.manual_seed(42)
 
 NUM_WORKERS = 1
 
-def save_model(model: torch.nn.Module, target_dir: str, epoch: int):
-    target_dir_path = Path(target_dir)
-    target_dir_path.mkdir(parents=True, exist_ok=True)
-
-    check_point_name = f"model_epoch_{epoch}"
-    model_save_path = target_dir_path / check_point_name
-
-    torch.save(obj=model.state_dict(), f=model_save_path)
-
 
 if __name__ == '__main__':
     dataset_split = Path('dataset_split')
