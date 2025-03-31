@@ -9,6 +9,7 @@ import torch.nn as nn
 import time
 from tqdm import trange
 from pathlib import Path
+from tifffile import TiffFile
 
 
 
@@ -92,8 +93,6 @@ class SemanticSegmentationDataset(torch.utils.data.Dataset):
         self.mask_names = mask_names
         self.transform = transform
         self.mask_transform = mask_transform
-        self.inputs_dtype = torch.float32
-        self.targets_dtype = torch.long
 
     def one_hot_encode_masks(self, masks, num_classes):
         img_height, img_width, _ = masks.shape
@@ -279,3 +278,35 @@ def predict_mask(img: torch.Tensor,
     result = torch.softmax(out, dim=1)
 
     return result
+
+class SatelliteImages(torch.utils.data.Dataset):
+    def __init__(self, satellite_image_location: Path, patch_size=224):
+
+        self.satellite_image_location = satellite_image_location
+        self.patch_size = patch_size
+        tif = TiffFile(self.satellite_image_location)
+        page = tif.pages[0]
+        self.raw_satellite_image = page.asarray()
+        self.patches = list()
+
+        H, W, C = self.raw_satellite_image.shape
+        assert C == 3
+        q_height, _ = divmod(H, self.patch_size)
+        q_width, _ = divmod(W, self.patch_size)
+        for i in range(q_height):
+            height_start = self.patch_size*i
+            height_end = self.patch_size*(i+1)
+            for j in range(q_width):
+                width_start = self.patch_size*j
+                width_end = self.patch_size*(j+1)
+                self.patches.append((height_start, height_end, width_start, width_end))
+
+
+    def __len__(self):
+        return len(self.patches)
+
+    def __getitem__(self, idx):
+        height_start, height_end, width_start, width_end = self.patches[idx]
+        image = self.raw_satellite_image[height_start:height_end, width_start:width_end, :]
+        image = transforms.ToTensor()(image)
+        return image

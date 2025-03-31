@@ -55,6 +55,7 @@ in {
       scipy
       albumentations
       ruff
+      tifffile
     ]) ++ ([
       segmentation_models
       pretrainedmodels

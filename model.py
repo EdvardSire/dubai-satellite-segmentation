@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+BATCH_SIZE = 16
 ENCODER = 'efficientnet-b4'
 ENCODER_WEIGHTS = 'imagenet'
 ACTIVATION = 'softmax2d' # could be None for logits or 'softmax2d' for multiclass segmentation

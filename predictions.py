@@ -1,11 +1,15 @@
 import torch
 import numpy as np
 import cv2
-from dataset import SemanticSegmentationDataset, predict_mask
+from dataset import MaskColorMap, SemanticSegmentationDataset, predict_mask, SatelliteImages
 from pathlib import Path
+from tqdm import tqdm
 
 from helper import prediction_to_rgb, mask_to_rgb
-from model import load_model, DEVICE
+from model import load_model, DEVICE, BATCH_SIZE
+
+import uuid
+rand_out_file = lambda: Path("out") / (uuid.uuid4().hex + ".png")
 
 def display_or_save(original_images,
                     ground_truth_masks,
@@ -40,25 +44,22 @@ def display_or_save(original_images,
             cv2.waitKey(0)
             cv2.destroyAllWindows()
         else: 
-            import uuid
-            save_path = Path("out") / (uuid.uuid4().hex + ".png")
-            print(save_path)
-            cv2.imwrite(save_path.__str__(), concatenated_image)
+            cv2.imwrite(rand_out_file().__str__(), concatenated_image)
 
 
-if __name__ == '__main__':
-    BATCH_SIZE = 16
+def inference_over_dataset_test_set():
     dataset_root = Path('dataset_split')
     dataset_test = SemanticSegmentationDataset(
             sorted((dataset_root / "test" / "images").iterdir()),
             sorted((dataset_root / "test" / "masks").iterdir()),
             transform=None)
     dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
-    print(len(dataloader_test))
+    model = load_model(Path("/home/user/repos/dubai-satellite-segmentation/exps/model_epoch_99"))
 
     for _ in range(len(dataloader_test)):
-        model = load_model(Path("/home/user/repos/dubai-satellite-segmentation/exps/model_epoch_99"))
         images, masks = next(iter(dataloader_test))
+        print(images.shape) # torch.Size([16, 3, 224, 224])                                                                                                                                                                         
+
         output = predict_mask(img=images, model=model, device=DEVICE) # pyright: ignore
         predicted_masks = np.argmax(output.to('cpu'), axis=1, keepdims=True)
 
@@ -68,3 +69,23 @@ if __name__ == '__main__':
                 batch_size=BATCH_SIZE,
                 save=True)
 
+
+if __name__ == '__main__':
+    sat_file = Path("/home/user/repos/datasets/UAV_VisLoc_dataset/04/satellite04.tif")
+    sat_dataset = SatelliteImages(sat_file)
+    sat_dataloader =  torch.utils.data.DataLoader(sat_dataset, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
+    model = load_model(Path("/home/user/repos/dubai-satellite-segmentation/exps/model_epoch_99"))
+
+
+    for _ in tqdm(range(len(sat_dataloader))):
+        images = next(iter(sat_dataloader))
+
+        output = predict_mask(img=images, model=model, device=DEVICE) # pyright: ignore
+        predicted_masks = np.argmax(output.to('cpu'), axis=1, keepdims=True)
+        masks = torch.zeros((BATCH_SIZE, len(MaskColorMap), sat_dataset.patch_size, sat_dataset.patch_size))
+
+        display_or_save(original_images=images,
+                ground_truth_masks=masks,
+                predicted_masks=predicted_masks,
+                batch_size=BATCH_SIZE,
+                save=True)
