@@ -92,13 +92,13 @@ def ratio(
 ):
     if not round(sum(ratio), 5) == 1:  # round for floating imprecision
         raise ValueError("The sums of `ratio` is over 1.")
-    if not len(ratio) in (2, 3):
+    if len(ratio) not in (2, 3):
         raise ValueError("`ratio` should")
 
     check_input_format(input)
 
     if use_tqdm:
-        prog_bar = tqdm(desc=f"Copying files", unit=" files")
+        prog_bar = tqdm(desc="Copying files", unit=" files")
 
     for class_dir in list_dirs(input):
         split_class_dir_ratio(
@@ -127,7 +127,7 @@ def fixed(
     if isinstance(fixed, int):
         fixed = [fixed]
 
-    if not len(fixed) in (1, 2, 3):
+    if len(fixed) not in (1, 2, 3):
         raise ValueError("`fixed` should be an integer or a list of 2 or 3 integers")
 
     if len(fixed) == 3 and oversample:
@@ -138,7 +138,7 @@ def fixed(
     check_input_format(input)
 
     if use_tqdm:
-        prog_bar = tqdm(desc=f"Copying files", unit=" files")
+        prog_bar = tqdm(desc="Copying files", unit=" files")
 
     classes_dirs = list_dirs(input)
     num_items = []
@@ -180,7 +180,7 @@ def fixed(
         for i in range(num_max_items - num_items):
             f_chosen = random.choice(train_files)
 
-            if not type(f_chosen) is tuple:
+            if type(f_chosen) is not tuple:
                 f_chosen = (f_chosen,)
 
             for f_orig in f_chosen:
@@ -322,7 +322,7 @@ def copy_files(files_type, class_dir, output, prog_bar, move):
 
         Path(full_path).mkdir(parents=True, exist_ok=True)
         for f in files:
-            if not prog_bar is None:
+            if prog_bar is not None:
                 prog_bar.update()
             if type(f) == tuple:
                 for x in f:

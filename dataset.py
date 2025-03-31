@@ -4,8 +4,6 @@ from torchvision import transforms
 import numpy as np
 from skimage.io import imread
 from enum import Enum
-import torch
-import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
 import time
@@ -82,18 +80,14 @@ class MeanIoU(nn.Module):
     
 
 class SemanticSegmentationDataset(torch.utils.data.Dataset):
-    def __init__(self, image_dir, mask_dir, image_names, mask_names, transform=None, mask_transform=None):
+    def __init__(self, image_names, mask_names, transform=None, mask_transform=None):
         """
         Args:
-            image_dir (string): Directory with all the images.
-            mask_dir (string): Directory with all the masks.
             image_names (list): List of image names.
             mask_names (list): List of mask names.
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.image_dir = image_dir
-        self.mask_dir = mask_dir
         self.image_names = image_names
         self.mask_names = mask_names
         self.transform = transform
@@ -114,8 +108,8 @@ class SemanticSegmentationDataset(torch.utils.data.Dataset):
         return len(self.image_names)
 
     def __getitem__(self, idx):
-        img_name = os.path.join(self.image_dir, self.image_names[idx])
-        mask_name = os.path.join(self.mask_dir, self.mask_names[idx])
+        img_name = os.path.join(self.image_names[idx])
+        mask_name = os.path.join(self.mask_names[idx])
 
         image = imread(img_name)
         mask = imread(mask_name)

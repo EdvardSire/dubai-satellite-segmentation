@@ -54,6 +54,7 @@ in {
       opencv4
       scipy
       albumentations
+      ruff
     ]) ++ ([
       segmentation_models
       pretrainedmodels
