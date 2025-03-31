@@ -54,15 +54,17 @@ if __name__ == '__main__':
             sorted((dataset_root / "test" / "masks").iterdir()),
             transform=None)
     dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
+    print(len(dataloader_test))
 
-    model = load_model(Path("/home/user/repos/dubai-satellite-segmentation/exps/model_epoch_99"))
-    images, masks = next(iter(dataloader_test))
-    output = predict_mask(img=images, model=model, device=DEVICE) # pyright: ignore
-    predicted_masks = np.argmax(output.to('cpu'), axis=1, keepdims=True)
+    for _ in range(len(dataloader_test)):
+        model = load_model(Path("/home/user/repos/dubai-satellite-segmentation/exps/model_epoch_99"))
+        images, masks = next(iter(dataloader_test))
+        output = predict_mask(img=images, model=model, device=DEVICE) # pyright: ignore
+        predicted_masks = np.argmax(output.to('cpu'), axis=1, keepdims=True)
 
-    display_or_save(original_images=images,
-            ground_truth_masks=masks,
-            predicted_masks=predicted_masks,
-            batch_size=BATCH_SIZE,
-            save=True)
+        display_or_save(original_images=images,
+                ground_truth_masks=masks,
+                predicted_masks=predicted_masks,
+                batch_size=BATCH_SIZE,
+                save=True)
 
